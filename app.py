@@ -11,14 +11,12 @@ import platform
 
 # 自動判斷系統並設定中文字型
 
-#if platform.system() == 'Windows':
-#    plt.rcParams['font.family'] = 'Microsoft JhengHei'
-#elif platform.system() == 'Darwin':  # macOS
-#    plt.rcParams['font.family'] = 'Heiti TC'
-#else:  # Linux (例如 Google Colab)
-#    matplotlib.font_manager._rebuild()
-#    plt.rcParams['font.family'] = 'Noto Sans CJK TC'
-plt.rcParams['font.family'] = 'Arial'  # 或使用預設字型
+if platform.system() == 'Windows':
+    plt.rcParams['font.family'] = 'Microsoft JhengHei'
+elif platform.system() == 'Darwin':  # macOS
+    plt.rcParams['font.family'] = 'Heiti TC'
+else:  # Linux (例如 Google Colab)
+    plt.rcParams['font.family'] = 'Noto Sans CJK TC'
 
 
 plt.rcParams['axes.unicode_minus'] = False    # 解決負號 '-' 顯示問題
