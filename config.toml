@@ -4,3 +4,7 @@ backgroundColor = "#ffffff"
 secondaryBackgroundColor = "#f0f0f5"
 textColor = "#262730"
 font = "sans serif"  # 這會設置 Streamlit 頁面的字型，這不會影響 matplotlib 圖表
+
+
+[global]
+font = "Arial"
