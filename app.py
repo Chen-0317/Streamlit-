@@ -9,8 +9,23 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import platform
 
-# 自動判斷系統並設定中文字型
+# 設定字型的 URL
+font_url = "https://github.com/Chen-0317/fonts/blob/main/NotoSansTC-Regular.ttf"
 
+# 使用 st.markdown 加載字型
+st.markdown(f"""
+    <style>
+    @font-face {{
+        font-family: 'Noto Sans CJK TC';
+        src: url('{font_url}');
+    }}
+    body {{
+        font-family: 'Noto Sans CJK TC', sans-serif;
+    }}
+    </style>
+""", unsafe_allow_html=True)
+
+# 自動判斷系統並設定中文字型
 if platform.system() == 'Windows':
     plt.rcParams['font.family'] = 'Microsoft JhengHei'
 elif platform.system() == 'Darwin':  # macOS
