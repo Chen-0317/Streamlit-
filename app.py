@@ -10,7 +10,7 @@ import seaborn as sns
 import platform
 
 # 設定字型的 URL
-font_url = "https://github.com/Chen-0317/fonts/blob/main/NotoSansTC-Regular.ttf"
+font_url = "https://raw.githubusercontent.com/yourusername/fonts/main/NotoSansCJK-Regular.ttf"
 
 # 使用 st.markdown 加載字型
 st.markdown(f"""
@@ -25,12 +25,12 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# 自動判斷系統並設定中文字型
+# 在 Matplotlib 中設定字型
 if platform.system() == 'Windows':
     plt.rcParams['font.family'] = 'Microsoft JhengHei'
 elif platform.system() == 'Darwin':  # macOS
     plt.rcParams['font.family'] = 'Heiti TC'
-else:  # Linux (例如 Google Colab)
+else:  # Linux
     plt.rcParams['font.family'] = 'Noto Sans CJK TC'
 
 
