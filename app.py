@@ -10,7 +10,7 @@ import seaborn as sns
 import platform
 
 # 設定字型的 URL
-font_url = "https://raw.githubusercontent.com/yourusername/fonts/main/NotoSansCJK-Regular.ttf"
+font_url = "https://github.com/Chen-0317/fonts/blob/main/NotoSansTC-Regular.ttf"
 
 # 使用 st.markdown 加載字型
 st.markdown(f"""
