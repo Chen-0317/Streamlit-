@@ -1,0 +1,8 @@
+[server]
+headless = true
+enableCORS = false
+enableWebsocketCompression = false
+
+# 設置字型
+[global]
+font = "Arial"
