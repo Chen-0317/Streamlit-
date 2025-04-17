@@ -194,7 +194,7 @@ def plot_stock_trend(df, ticker):
             
 def get_date_range():
     while True:
-        mode = st.sidebar.selectbox('時間 : 1. 固定範圍 (1M/3M/6M/1Y) 2. 自定義範圍: ', ['1', '2'])
+        mode = st.sidebar.selectbox('時間 : 1. 固定範圍 (1M/3M/6M/1Y) 2. 自定義範圍: ', ['1', '2'] )
         if mode not in ['1','2']:
             st.warning('輸入無效，請重新選擇')
             continue
@@ -208,42 +208,31 @@ def get_date_range():
             return start_date.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d')
 
         elif mode == '2':  # 自定義範圍
-            # 不進行處理，跳過直到用戶輸入結束日期
             st.warning('請在左側輸入自定義日期範圍。')
 
-            start_date_str = st.sidebar.text_input("請輸入起始日期 (格式: YYYY-MM-DD): ").strip()
-            if not start_date_str:
-                continue  # 如果未輸入起始日期，跳過並繼續等待輸入
-            
+            start_date_str = st.sidebar.text_input("請輸入起始日期 (格式: YYYY-MM-DD):", key="custom_start_input").strip()
+        end_date_str = st.sidebar.text_input("請輸入結束日期 (格式: YYYY-MM-DD):", key="custom_end_input").strip()
+
+        # 只在兩者都有輸入時才檢查與處理
+        if start_date_str and end_date_str:
             try:
                 start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-                if start_date > today:
-                    st.warning('起始日期不能在未來，請輸入正確的日期')
-                    continue  # 重新進入循環，直到用戶輸入正確日期
-            except ValueError:
-                st.warning('格式錯誤，請輸入正確的日期格式 (YYYY-MM-DD)')
-                continue  # 日期格式錯誤時繼續讓用戶輸入
-            
-            # 這裡開始輸入結束日期
-            end_date_str = st.sidebar.text_input("請輸入結束日期 (格式: YYYY-MM-DD): ").strip()
-            if not end_date_str:
-                continue  # 如果未輸入結束日期，跳過並繼續等待輸入
-            
-            try:
                 end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-                if end_date > today:
-                    st.warning('結束日期不能在未來，請輸入正確的日期')
-                    continue  # 重新進入循環，直到用戶輸入正確日期
-                elif end_date < start_date:
-                    st.warning('結束日期不能早於起始日期，請重新輸入')
-                    continue  # 重新進入循環，直到用戶輸入正確日期
-                else:
-                    # 如果結束日期是有效的，返回範圍
-                    return start_date_str, end_date_str
 
+                if start_date > today or end_date > today:
+                    st.warning('起始/結束日期不能在未來')
+                    return None, None
+                elif end_date < start_date:
+                    st.warning('結束日期不能早於起始日期')
+                    return None, None
+                else:
+                    return start_date_str, end_date_str
             except ValueError:
-                st.warning('格式錯誤，請輸入正確的結束日期格式 (YYYY-MM-DD)')
-                continue  # 日期格式錯誤時繼續讓用戶輸入
+                st.warning('請輸入正確的日期格式 (YYYY-MM-DD)')
+                return None, None
+
+        # 尚未輸入完整就安靜地等待
+        return None, None
 
 # 清洗和處理股票數據
 def clean_and_process_stock_data(tickers, data):
