@@ -8,29 +8,16 @@ from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 import seaborn as sns
 import platform
+from streamlit_autorefresh import st_autorefresh
 
-# 設定字型的 URL
-font_url = "https://github.com/Chen-0317/fonts/blob/main/NotoSansTC-Regular.ttf"
 
-# 使用 st.markdown 加載字型
-st.markdown(f"""
-    <style>
-    @font-face {{
-        font-family: 'Noto Sans CJK TC';
-        src: url('{font_url}');
-    }}
-    body {{
-        font-family: 'Noto Sans CJK TC', sans-serif;
-    }}
-    </style>
-""", unsafe_allow_html=True)
-
-# 在 Matplotlib 中設定字型
+# 自動判斷系統並設定中文字型
 if platform.system() == 'Windows':
     plt.rcParams['font.family'] = 'Microsoft JhengHei'
 elif platform.system() == 'Darwin':  # macOS
     plt.rcParams['font.family'] = 'Heiti TC'
-else:  # Linux
+else:  # Linux (例如 Google Colab)
+    matplotlib.font_manager._rebuild()
     plt.rcParams['font.family'] = 'Noto Sans CJK TC'
 
 
@@ -152,11 +139,11 @@ def plot_exchange_rate_trend(df, currencies):
     
     
     # 轉換為中文貨幣名稱
-    base_currency_name = currency_code_map.get(base_currency, base_currency)  # 如果找不到對應中文名，則使用原代碼
-    target_currency_name = currency_code_map.get(target_currency, target_currency)
+#    base_currency_name = currency_code_map.get(base_currency, base_currency)  # 如果找不到對應中文名，則使用原代碼
+#    target_currency_name = currency_code_map.get(target_currency, target_currency)
     
     # 動態設置標題
-    title = f"{base_currency_name} 兌 {target_currency_name} 過去30天匯率走勢"
+    title = f"{base_currency} TO {target_currency} over the past 30 days"
     
     # 畫圖
     plt.figure(figsize=(10, 6))
@@ -170,8 +157,8 @@ def plot_exchange_rate_trend(df, currencies):
     plt.title(title, fontsize=14)
 
     # 設定X軸、Y軸的標籤和格式
-    plt.xlabel("日期", fontsize=12)
-    plt.ylabel("匯率", fontsize=12)
+    plt.xlabel("Date", fontsize=12)
+    plt.ylabel("Exchange Rate", fontsize=12)
     plt.xticks(rotation=45)  # 讓日期顯示更清晰
     plt.grid()  # 格線
     plt.legend()
@@ -294,16 +281,15 @@ def main():
         currencies_input = st.sidebar.text_input('輸入要查詢的貨幣對 (例:"USDTWD=X", "EURTWD=X")').strip()
         
         if not currencies_input:
+
+            # 每 5 分鐘 (300000 毫秒) 自動刷新一次頁面
+            st_autorefresh(interval=300000, key="exchange_rate_refresh")
+            
             # 查詢銀行匯率並顯示表格
             exchange_rate_data = get_exchange_rates()
                         
             if not exchange_rate_data.empty:
-                st.dataframe(exchange_rate_data)  # 顯示所有銀行匯率資料
-            
-            # 自動刷新頁面每 5 分鐘
-            time.sleep(300)  # 5 分鐘後重新加載
-            st.rerun()  # 重新加載頁面
-        
+                st.dataframe(exchange_rate_data)  # 顯示所有銀行匯率資料  
         else:
             # 查詢單一貨幣對的匯率並顯示折線圖
             currencies = currencies_input.split(",")  # 輸入貨幣對
@@ -340,7 +326,8 @@ def main():
             else:
                 st.warning("請輸入有效的股票代碼")
         else:
-            # 如果沒有輸入股票代碼，不進行任何操作
+            # 股票頁面無輸入時，每 5 分鐘自動刷新
+            st_autorefresh(interval=300000, key="stock_page_refresh")
             st.write("請輸入股票代碼以查詢走勢圖")
             
 if __name__ == "__main__":
