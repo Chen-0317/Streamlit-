@@ -313,7 +313,7 @@ def main():
 
             if valid_tickers:
                 # 顯示股票走勢圖
-                st.write("顯示股票走勢圖")
+                st.write("")
                 
                 # 請求股票數據
                 start_date, end_date = get_date_range()  # 獲取日期範圍
