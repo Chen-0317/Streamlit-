@@ -1,1 +1,9 @@
 streamlit-autorefresh
+streamlit
+yfinance
+pandas
+requests
+beautifulsoup4
+matplotlib
+seaborn
+streamlit-autorefresh
