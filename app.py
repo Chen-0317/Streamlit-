@@ -17,7 +17,7 @@ if platform.system() == 'Windows':
 elif platform.system() == 'Darwin':  # macOS
     plt.rcParams['font.family'] = 'Heiti TC'
 else:  # Linux (例如 Google Colab)
-    matplotlib.font_manager._rebuild()
+#    matplotlib.font_manager._rebuild()
     plt.rcParams['font.family'] = 'Noto Sans CJK TC'
 
 
