@@ -1,7 +1,1 @@
-streamlit
-yfinance
-pandas
-requests
-matplotlib
-seaborn
-beautifulsoup4
+streamlit-autorefresh
