@@ -50,12 +50,17 @@ def get_exchange_rates():
 
 def get_exchange_rate_data(pairs):
     if isinstance(pairs, list):
-        pairs = ','.join(pairs)
+        pairs = [pair.upper() for pair in pairs]
     df = yf.download(pairs, period="30d", interval="1d")
     if df.empty:
         st.warning("無法獲取匯率數據")
         return pd.DataFrame()
-    df = df['Close'].reset_index().melt(id_vars="Date", var_name="貨幣對", value_name="匯率")
+    if isinstance(df.columns, pd.MultiIndex):
+        df = df['Close'].reset_index().melt(id_vars="Date", var_name="貨幣對", value_name="匯率")
+    else:
+        df = df[['Close']].rename(columns={'Close': '匯率'})
+        df = df.reset_index()
+        df['貨幣對'] = pairs[0] if isinstance(pairs, list) and len(pairs) == 1 else '未知'
     df.rename(columns={'Date': '日期'}, inplace=True)
     df['日期'] = pd.to_datetime(df['日期']).dt.tz_localize(None)
     return df
@@ -89,26 +94,49 @@ def get_date_range():
         return start, end
 
 def calculate_technical_indicators(df, rsi_period):
+    result = {}
+
     if isinstance(df.columns, pd.MultiIndex):
-        result = {}
-        for ticker in df.columns.levels[0]:
-            data = df[ticker].copy()
-            data['MA20'] = data['Close'].rolling(window=20).mean()
-            data['UpperBand'] = data['MA20'] + 2 * data['Close'].rolling(window=20).std()
-            data['LowerBand'] = data['MA20'] - 2 * data['Close'].rolling(window=20).std()
-            delta = data['Close'].diff()
-            gain = delta.clip(lower=0)
-            loss = -delta.clip(upper=0)
-            avg_gain = gain.rolling(window=rsi_period).mean()
-            avg_loss = loss.rolling(window=rsi_period).mean()
-            rs = avg_gain / avg_loss
-            data['RSI'] = 100 - (100 / (1 + rs))
-            result[ticker] = data
-        return result
+        # 判斷哪個 level 是 ticker（通常是股票代碼含 ".TW"）
+        level_values = df.columns.get_level_values(0)
+        is_ticker_first = all(['.TW' in str(v) or v.isdigit() for v in level_values[:5]])
+        ticker_level = 0 if is_ticker_first else 1
+        field_level = 1 - ticker_level
+
+        for ticker in df.columns.levels[ticker_level]:
+            try:
+                sub_df = df.xs(ticker, axis=1, level=ticker_level).copy()
+                if 'Close' not in sub_df.columns:
+                    st.warning(f"{ticker} 缺少 'Close' 欄位，跳過此股票")
+                    continue
+
+                sub_df['MA20'] = sub_df['Close'].rolling(window=20).mean()
+                std = sub_df['Close'].rolling(window=20).std()
+                sub_df['UpperBand'] = sub_df['MA20'] + 2 * std
+                sub_df['LowerBand'] = sub_df['MA20'] - 2 * std
+
+                delta = sub_df['Close'].diff()
+                gain = delta.clip(lower=0)
+                loss = -delta.clip(upper=0)
+                avg_gain = gain.rolling(window=rsi_period).mean()
+                avg_loss = loss.rolling(window=rsi_period).mean()
+                rs = avg_gain / avg_loss
+                sub_df['RSI'] = 100 - (100 / (1 + rs))
+
+                result[ticker] = sub_df
+            except Exception as e:
+                st.warning(f"{ticker} 計算失敗：{e}")
     else:
+        if 'Close' not in df.columns:
+            st.warning("資料中沒有 'Close' 欄位，無法計算技術指標")
+            return {}
+
+        df = df.copy()
         df['MA20'] = df['Close'].rolling(window=20).mean()
-        df['UpperBand'] = df['MA20'] + 2 * df['Close'].rolling(window=20).std()
-        df['LowerBand'] = df['MA20'] - 2 * df['Close'].rolling(window=20).std()
+        std = df['Close'].rolling(window=20).std()
+        df['UpperBand'] = df['MA20'] + 2 * std
+        df['LowerBand'] = df['MA20'] - 2 * std
+
         delta = df['Close'].diff()
         gain = delta.clip(lower=0)
         loss = -delta.clip(upper=0)
@@ -116,7 +144,11 @@ def calculate_technical_indicators(df, rsi_period):
         avg_loss = loss.rolling(window=rsi_period).mean()
         rs = avg_gain / avg_loss
         df['RSI'] = 100 - (100 / (1 + rs))
-        return df
+
+        result["SINGLE"] = df
+
+    return result
+
 
 def plot_stock(df, ticker):
     fig = go.Figure()
@@ -134,87 +166,95 @@ def plot_stock(df, ticker):
         fig_rsi.update_layout(title=f'{ticker} RSI', yaxis_range=[0, 100], font_family=font_family)
         st.plotly_chart(fig_rsi, use_container_width=True)
 
-# ==================== 取得台灣股票代碼列表（使用 CSV 快取 ==================== 
+# ==================== 取得台灣股票代碼列表 ====================
 @st.cache_data
-def get_twse_stock_list(use_cache=True, cache_filename="twse_stock_list.csv", max_age_days=1):
-    import re
-    def is_cache_valid(file_path):
-        if not os.path.exists(file_path):
-            return False
-        modified_time = datetime.fromtimestamp(os.path.getmtime(file_path))
-        return (datetime.now() - modified_time).days < max_age_days
-
-    if use_cache and is_cache_valid(cache_filename):
-        try:
-            return pd.read_csv(cache_filename, encoding='utf-8')
-        except Exception as e:
-            st.warning(f"載入本地快取失敗：{e}，改為重新下載...")
-
+def get_twse_stock_list_from_local(filename="twse_stock_list_split.csv"):
     try:
-        url = 'https://isin.twse.com.tw/isin/class_i.jsp?kind=1'
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        tables = pd.read_html(url, encoding='utf-8')
-
-        df = None
-        for table in tables:
-            if table.shape[1] >= 5 and table.columns[0] == '有價證券代號及名稱':
-                df = table.copy()
-                break
-
-        if df is None:
-            raise ValueError("找不到包含『有價證券代號及名稱』欄位的表格")
-
-        df.columns = df.iloc[0]  # 第一列作為欄位名稱
-        df = df[1:]  # 去除標題列
-        df = df[['有價證券代號及名稱']].dropna()
-
-        # 解析代號與名稱
-        df[['code', 'name']] = df['有價證券代號及名稱'].str.extract(r'(\d+)\s+(.+)')
-        df = df[df['code'].notna()]
+        # 讀取 CSV 文件並回傳
+        df = pd.read_csv(filename, encoding='utf-8')
+        
+        # 檢查是否有正確的欄位
+        if 'code' not in df.columns or 'name' not in df.columns:
+            st.warning("CSV 文件缺少必要的欄位")
+            return pd.DataFrame(columns=['code', 'name', 'display'])
+        
+        # 如果有必要可以進行欄位清理
         df['display'] = df['code'] + ' ' + df['name']
-        df = df[['code', 'name', 'display']]
-
-        df.to_csv(cache_filename, index=False, encoding='utf-8')
         return df
     except Exception as e:
-        st.error(f"無法取得台灣股票代碼列表：{e}")
+        st.error(f"載入股票清單失敗：{e}")
         return pd.DataFrame(columns=['code', 'name', 'display'])
 
 # ==================== 股票查詢功能 ====================
 def stock_query():
     st.sidebar.subheader("股票查詢")
-    stock_list_df = get_twse_stock_list()
+    stock_list_df = get_twse_stock_list_from_local()
     if stock_list_df.empty:
         st.warning("無法載入股票代碼列表，請稍後再試。")
         return
 
-    search_input = st.sidebar.text_input("輸入股票代碼或名稱的前幾位：").strip()
+    search_input = st.sidebar.text_input("輸入股票代碼或前幾位代碼（例如：2330, 0050 或 00, 13）：").strip()
+
     if search_input:
-        filtered_df = stock_list_df[stock_list_df['code'].str.startswith(search_input) | stock_list_df['name'].str.contains(search_input)]
-        options = filtered_df['display'].tolist()
-        if options:
-            selected = st.sidebar.selectbox("選擇股票：", options)
-            selected_code = selected.split(' ')[0]
-            ticker = f"{selected_code}.TW"
-            st.write(f"您選擇的股票代碼為：{ticker}")
+        if len(search_input) == 2 and search_input.isdigit():  # 若輸入兩位數字，顯示符合的選項
+            matched_stocks = stock_list_df[stock_list_df['code'].str.startswith(search_input)]
+            if not matched_stocks.empty:
+                # 提供下拉選單供用戶選擇股票代碼
+                selected_stock = st.selectbox("選擇股票代碼", matched_stocks['display'])
+                st.write(f"你選擇了股票：{selected_stock}")
+                
+                # 顯示選中的股票的技術指標分析圖
+                ticker = selected_stock.split(' ')[0]  # 獲取股票代碼部分
+                valid_tickers = get_valid_tickers([f"{ticker}.TW"])
+                if valid_tickers:
+                    rsi_period = st.sidebar.number_input("RSI 週期", 5, 30, 14)
+                    start, end = get_date_range()
+                    data = yf.download(valid_tickers, start=start, end=end, group_by="ticker", threads=True)
+                    df_result = calculate_technical_indicators(data, rsi_period)
+                    
+                    if isinstance(df_result, dict):
+                        for code, df in df_result.items():
+                            st.subheader(f"\U0001F4C8 {code} 技術分析圖")
+                            plot_stock(df, code)
+                    else:
+                        st.subheader(f"\U0001F4C8 {valid_tickers[0]} 技術分析圖")
+                        plot_stock(df_result, valid_tickers[0])
+            else:
+                st.warning(f"沒有找到以 '{search_input}' 開頭的股票代碼")
+        else:
+            # 若用戶輸入股票代碼（單支或多支）
+            codes = [code.strip() for code in search_input.split(',') if code.strip()]
+            tickers = [f"{code}.TW" for code in codes]
+
+            valid_tickers = get_valid_tickers(tickers)
+            if not valid_tickers:
+                st.warning("找不到有效的股票代碼")
+                return
+
             rsi_period = st.sidebar.number_input("RSI 週期", 5, 30, 14)
             start, end = get_date_range()
-            data = yf.download(ticker, start=start, end=end)
-            if not data.empty:
-                df = calculate_technical_indicators(data, rsi_period)
-                st.subheader("📊 股票技術分析圖")
-                plot_stock(df, ticker)
+
+            # 多支股票一次下載
+            data = yf.download(valid_tickers, start=start, end=end, group_by="ticker", threads=True)
+
+            df_result = calculate_technical_indicators(data, rsi_period)
+
+            if isinstance(df_result, dict):
+                for code, df in df_result.items():
+                    st.subheader(f"\U0001F4C8 {code} 技術分析圖")
+                    plot_stock(df, code)
             else:
-                st.warning("找不到此股票的歷史資料")
-        else:
-            st.warning("未找到符合條件的股票，請嘗試其他輸入。")
+                # 只查一支的時候 fallback
+                st.subheader(f"\U0001F4C8 {valid_tickers[0]} 技術分析圖")
+                plot_stock(df_result, valid_tickers[0])
     else:
         st.write("請在上方輸入股票代碼或名稱的前幾位以進行查詢。")
+
 
 # ==================== 主程式 ====================
 def main():
     st.set_page_config(layout="wide")
-    st.title("📈 匯率與股票視覺化儀表板")
+    st.title("\U0001F4C8 匯率與股票視覺化儀表板")
     menu = st.sidebar.radio("功能選單", ["匯率查詢", "股票查詢"])
 
     if menu == "匯率查詢":
