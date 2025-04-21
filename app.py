@@ -10,6 +10,7 @@ from streamlit_autorefresh import st_autorefresh
 import plotly.graph_objects as go
 import plotly.express as px
 import os
+import numpy as np
 
 # ==================== 系統字體設定 ====================
 if platform.system() == 'Windows':
@@ -23,35 +24,65 @@ else:
 currency_code_map = {
     'USD': '美金', 'EUR': '歐元', 'JPY': '日圓', 'CNY': '人民幣',
     'GBP': '英鎊', 'AUD': '澳元', 'CAD': '加拿大元', 'CHF': '瑞士法郎',
-    'HKD': '港幣', 'SGD': '新加坡元', 'TWD': '台幣'
+    'HKD': '港幣', 'SGD': '新加坡幣', 'TWD': '台幣', 'ZAR': '南非幣',
+    'ZND': '紐西蘭幣', 'SEK': '瑞典幣', 'MXN': '墨西哥披索', 'THB': '泰銖'
 }
+currency_options = [
+    'USD', 'TWD', 'EUR', 'JPY', 'CNY', 'HKD', 'GBP', 'AUD', 'CAD', 
+    'CHF', 'SGD', 'ZAR', 'ZND', 'SEK', 'MXN', 'THB'
+]
+# 初始化 Session State 並檢查有效性
+if "from_currency" not in st.session_state or st.session_state["from_currency"] not in currency_options:
+    st.session_state["from_currency"] = currency_options[0]
 
-def get_exchange_rates():
-    url = f"https://rate.bot.com.tw/xrt?Lang=zh-TW"
-    response = requests.get(url)
-    if response.status_code == 200:
-        soup = BeautifulSoup(response.text, 'html.parser')
-        currency_cells = soup.find_all('td', {'data-table': '幣別'})
-        data = []
-        for cell in currency_cells:
-            name = cell.get_text(strip=True).lower()
-            buy = cell.find_next('td', {'data-table': '本行即期買入'})
-            sell = cell.find_next('td', {'data-table': '本行即期賣出'})
-            data.append({
-                "幣別": name.split('(')[0].strip(),
-                "即期買入": buy.get_text(strip=True) if buy else "N/A",
-                "即期賣出": sell.get_text(strip=True) if sell else "N/A",
-                "日期": datetime.now().strftime('%Y-%m-%d')
-            })
-        return pd.DataFrame(data)
+if "to_currency" not in st.session_state or st.session_state["to_currency"] not in currency_options:
+    st.session_state["to_currency"] = currency_options[1]
+
+def get_exchange_rate(pair):
+    df = yf.download(pair, period="30d", interval="1d", auto_adjust=False)
+    
+    if df.empty:
+        st.warning("無法取得匯率資料，請確認貨幣代碼是否正確")
+        return None, None
+
+    # 檢查是否為 MultiIndex 欄位
+    if isinstance(df.columns, pd.MultiIndex):
+        # 取得正確的 close 資料（多層欄位）
+        try:
+            close_series = df['Close'][pair]  # 例如 df['Close']['USDUSD=X']
+        except KeyError:
+            st.warning("匯率欄位找不到，請確認匯率代碼是否正確")
+            return None, None
     else:
-        st.error("無法查詢匯率資料")
-        return pd.DataFrame()
+        try:
+            close_series = df['Close']
+        except KeyError:
+            st.warning("匯率欄位缺失")
+            return None, None
+
+    # 建立乾淨 dataframe
+    close_df = close_series.dropna().reset_index()
+    close_df.rename(columns={'Date': '日期', pair: '匯率'}, inplace=True)
+    close_df['日期'] = pd.to_datetime(close_df['日期']).dt.tz_localize(None)
+
+    # 解析最後一筆匯率
+    try:
+        value = close_df['匯率'].iloc[-1]
+        rate = float(np.array(value).flatten()[0]) if isinstance(value, (np.ndarray, list)) else float(value)
+        if pd.isna(rate):
+            raise ValueError("匯率為 NaN")
+    except Exception as e:
+        st.error(f"無法解析最後一筆匯率資料：{e}")
+        return None, close_df
+
+    return rate, close_df
+
+
 
 def get_exchange_rate_data(pairs):
     if isinstance(pairs, list):
         pairs = [pair.upper() for pair in pairs]
-    df = yf.download(pairs, period="30d", interval="1d")
+    df = yf.download(pairs, period="30d", interval="1d", auto_adjust=False)
     if df.empty:
         st.warning("無法獲取匯率數據")
         return pd.DataFrame()
@@ -65,11 +96,69 @@ def get_exchange_rate_data(pairs):
     df['日期'] = pd.to_datetime(df['日期']).dt.tz_localize(None)
     return df
 
-def plot_exchange_rate(df):
-    fig = px.line(df, x='日期', y='匯率', color='貨幣對', title='匯率趨勢')
-    fig.update_layout(font_family=font_family)
-    st.plotly_chart(fig, use_container_width=True)
+def plot_exchange_rate(df, from_currency, to_currency):
+    fig = go.Figure()
 
+    # 使用 '匯率' 作為 y 軸，'日期' 作為 x 軸
+    fig.add_trace(go.Scatter(x=df['日期'], y=df['匯率'], mode='lines', name=f'{from_currency}/{to_currency} 匯率'))
+
+    fig.update_layout(
+        title=f"{from_currency}/{to_currency} 匯率走勢圖",
+        xaxis_title="日期",
+        yaxis_title="匯率",
+        hovermode="x unified",  # 鼠標滑過顯示所有數據點
+        dragmode="zoom"  # 啟用放大縮小功能
+    )
+    
+    return fig
+
+# 定義對調幣別的 callback
+def swap_currencies():
+    from_currency = st.session_state["from_currency"]
+    to_currency = st.session_state["to_currency"]
+    st.session_state["from_currency"] = to_currency
+    st.session_state["to_currency"] = from_currency
+
+def exchange_rate_app():
+    st.subheader("💱 匯率換算與趨勢圖")
+
+    # 初始化 Session State
+    if "from_currency" not in st.session_state:
+        st.session_state["from_currency"] = ""
+    if "to_currency" not in st.session_state:
+        st.session_state["to_currency"] = ""
+
+    col1, col2, col3 = st.columns([3, 1.5, 3])
+
+    with col1:
+        from_currency = st.selectbox("原幣別", currency_options, key="from_currency")
+        amount = st.number_input("金額", min_value=0.0, value=100.0, step=10.0)
+
+    with col2:
+        st.button("🔁 幣別對調", on_click=swap_currencies, use_container_width=True)
+
+    with col3:
+        to_currency = st.selectbox("欲換成幣別", currency_options, key="to_currency")
+
+    # 匯率與圖表顯示
+    if st.session_state["from_currency"] and st.session_state["to_currency"]:
+        rate, df = get_exchange_rate(f"{st.session_state['from_currency']}{st.session_state['to_currency']}=X")
+        if rate is not None:
+            try:
+                rate = float(rate)
+                converted = amount * rate
+                st.metric(label="可兌換金額", value=f"{converted:,.2f} {st.session_state['to_currency']}", delta=f"匯率：{rate:.4f}")
+                plot_exchange_rate(df, st.session_state["from_currency"], st.session_state["to_currency"])
+            except Exception as e:
+                st.error(f"匯率顯示錯誤：{e}")
+        else:
+            st.warning("無法取得匯率資料，請確認幣別組合是否正確。")
+
+    # 顯示匯率走勢圖
+    if df is not None:
+        fig = plot_exchange_rate(df, from_currency, to_currency)
+        st.plotly_chart(fig, use_container_width=True)
+            
 # ==================== 股票資料 ====================
 def get_valid_tickers(tickers):
     valid = []
@@ -258,18 +347,7 @@ def main():
     menu = st.sidebar.radio("功能選單", ["匯率查詢", "股票查詢"])
 
     if menu == "匯率查詢":
-        pairs_input = st.sidebar.text_input("輸入匯率代碼 (例: USDTWD=X, EURTWD=X)")
-        if pairs_input:
-            pairs = [p.strip().upper() for p in pairs_input.split(',') if p.strip()]
-            df = get_exchange_rate_data(pairs)
-            if not df.empty:
-                st.dataframe(df)
-                plot_exchange_rate(df)
-        else:
-            st_autorefresh(interval=300000, key="refresh")
-            df = get_exchange_rates()
-            if not df.empty:
-                st.dataframe(df)
+        exchange_rate_app()
 
     elif menu == "股票查詢":
         stock_query()
