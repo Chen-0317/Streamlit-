@@ -36,7 +36,7 @@ if "from_currency" not in st.session_state or st.session_state["from_currency"] 
     st.session_state["from_currency"] = currency_options[0]
 
 if "to_currency" not in st.session_state or st.session_state["to_currency"] not in currency_options:
-    st.session_state["to_currency"] = currency_options[1]
+    st.session_state["to_currency"] = currency_options[0]
 
 def get_exchange_rate(pair):
     df = yf.download(pair, period="30d", interval="1d", auto_adjust=False)
@@ -132,7 +132,7 @@ def exchange_rate_app():
 
     with col1:
         from_currency = st.selectbox("原幣別", currency_options, key="from_currency")
-        amount = st.number_input("金額", min_value=0.0, value=100.0, step=10.0)
+        amount = st.number_input("金額", min_value=0.0, value=0000.0, step=10.0)
 
     with col2:
         st.button("🔁 幣別對調", on_click=swap_currencies, use_container_width=True)
