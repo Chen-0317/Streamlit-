@@ -21,15 +21,17 @@ else:
     font_family = 'Noto Sans CJK TC'
 
 # ==================== 匯率資料 ====================
-currency_code_map = {
-    'USD': '美金', 'EUR': '歐元', 'JPY': '日圓', 'CNY': '人民幣',
-    'GBP': '英鎊', 'AUD': '澳元', 'CAD': '加拿大元', 'CHF': '瑞士法郎',
-    'HKD': '港幣', 'SGD': '新加坡幣', 'TWD': '台幣', 'ZAR': '南非幣',
-    'ZND': '紐西蘭幣', 'SEK': '瑞典幣', 'MXN': '墨西哥披索', 'THB': '泰銖'
-}
+#currency_code_map = {
+#    'USD': '美金', 'EUR': '歐元', 'JPY': '日圓', 'CNY': '人民幣',
+#   'GBP': '英鎊', 'AUD': '澳元', 'CAD': '加拿大元', 'CHF': '瑞士法郎',
+#    'HKD': '港幣', 'SGD': '新加坡幣', 'TWD': '台幣', 'ZAR': '南非幣',
+#    'ZND': '紐西蘭幣', 'SEK': '瑞典幣', 'MXN': '墨西哥披索', 'THB': '泰銖'
+#}
 currency_options = [
-    'USD', 'TWD', 'EUR', 'JPY', 'CNY', 'HKD', 'GBP', 'AUD', 'CAD', 
-    'CHF', 'SGD', 'ZAR', 'ZND', 'SEK', 'MXN', 'THB'
+    'USD 美金', 'EUR 歐元', 'JPY 日圓', 'CNY 人民幣',
+    'GBP 英鎊', 'AUD 澳元', 'CAD 加拿大元', 'CHF 瑞士法郎',
+    'HKD 港幣', 'SGD 新加坡幣', 'TWD 台幣', 'ZAR 南非幣',
+    'ZND 紐西蘭幣', 'SEK 瑞典幣', 'MXN 墨西哥披索', 'THB 泰銖'
 ]
 # 初始化 Session State 並檢查有效性
 if "from_currency" not in st.session_state or st.session_state["from_currency"] not in currency_options:
@@ -37,6 +39,7 @@ if "from_currency" not in st.session_state or st.session_state["from_currency"] 
 
 if "to_currency" not in st.session_state or st.session_state["to_currency"] not in currency_options:
     st.session_state["to_currency"] = currency_options[0]
+
 
 def get_exchange_rate(pair):
     df = yf.download(pair, period="30d", interval="1d", auto_adjust=False)
@@ -76,8 +79,6 @@ def get_exchange_rate(pair):
         return None, close_df
 
     return rate, close_df
-
-
 
 def get_exchange_rate_data(pairs):
     if isinstance(pairs, list):
@@ -142,7 +143,11 @@ def exchange_rate_app():
 
     # 匯率與圖表顯示
     if st.session_state["from_currency"] and st.session_state["to_currency"]:
-        rate, df = get_exchange_rate(f"{st.session_state['from_currency']}{st.session_state['to_currency']}=X")
+        from_currency_code = st.session_state["from_currency"][:3]
+        to_currency_code = st.session_state["to_currency"][:3]
+        query_code = f"{from_currency_code}{to_currency_code}=X"
+
+        rate, df = get_exchange_rate(query_code)
         if rate is not None:
             try:
                 rate = float(rate)
