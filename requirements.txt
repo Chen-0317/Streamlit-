@@ -9,3 +9,5 @@ seaborn
 streamlit-autorefresh
 plotly
 talib
+numpy
+os
