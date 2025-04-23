@@ -11,6 +11,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import os
 import numpy as np
+import talib as ta
 
 # ==================== 系統字體設定 ====================
 if platform.system() == 'Windows':
@@ -102,7 +103,7 @@ def plot_exchange_rate(df, from_currency, to_currency):
 
     # 使用 '匯率' 作為 y 軸，'日期' 作為 x 軸
     fig.add_trace(go.Scatter(x=df['日期'], y=df['匯率'], mode='lines', name=f'{from_currency}/{to_currency} 匯率'))
-
+    
     fig.update_layout(
         title=f"{from_currency}/{to_currency} 匯率走勢圖",
         xaxis_title="日期",
@@ -133,7 +134,7 @@ def exchange_rate_app():
 
     with col1:
         from_currency = st.selectbox("原幣別", currency_options, key="from_currency")
-        amount = st.number_input("金額", min_value=0.0, value=0000.0, step=10.0)
+        amount = st.number_input("金額", min_value=0.0, value=100.0, step=10.0)
 
     with col2:
         st.button("🔁 幣別對調", on_click=swap_currencies, use_container_width=True)
@@ -257,6 +258,10 @@ def plot_stock(df, ticker):
     if 'RSI' in df.columns:
         fig_rsi = go.Figure()
         fig_rsi.add_trace(go.Scatter(x=df.index, y=df['RSI'], name='RSI'))
+        
+        # 加上 RSI 區間線
+        fig_rsi.add_hline(y=70, line=dict(color='red', dash='dash'), annotation_text='超買', annotation_position='top left')
+        fig_rsi.add_hline(y=30, line=dict(color='green', dash='dash'), annotation_text='超賣', annotation_position='bottom left')
         fig_rsi.update_layout(title=f'{ticker} RSI', yaxis_range=[0, 100], font_family=font_family)
         st.plotly_chart(fig_rsi, use_container_width=True)
 
@@ -290,22 +295,88 @@ def stock_query():
     search_input = st.sidebar.text_input("輸入股票代碼或前幾位代碼（例如：2330, 0050 或 00, 13）：").strip()
 
     if search_input:
-        if len(search_input) == 2 and search_input.isdigit():  # 若輸入兩位數字，顯示符合的選項
+        
+        # ▼ 顯示當日大盤指數收盤價
+        st.markdown("---")
+        st.subheader("📊 當日大盤指數")
+
+        try:
+            # 多抓一天避免遇到休市日
+            dow = yf.download("^DJI", period="2d", interval="1d", group_by="ticker")
+            twii = yf.download("^TWII", period="2d", interval="1d", group_by="ticker")
+        
+            # 重設欄位名稱，將多層欄位扁平化
+            dow.columns = [col[1] if isinstance(col, tuple) else col for col in dow.columns]
+            twii.columns = [col[1] if isinstance(col, tuple) else col for col in twii.columns]
+            
+            if not dow.empty and not twii.empty:
+                dow_close = dow['Close'].dropna().iloc[-1] if 'Close' in dow.columns else None
+                twii_close = twii['Close'].dropna().iloc[-1] if 'Close' in twii.columns else None
+                
+                if dow_close is not None and twii_close is not None:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("道瓊指數（^DJI）", f"{dow_close:,.2f}")
+                    with col2:
+                        st.metric("台灣加權指數（^TWII）", f"{twii_close:,.2f}")
+                else:
+                    st.warning("大盤指數的收盤價資料有問題")
+            else:
+                st.warning("無法獲取大盤指數資料")
+            
+            # 顯示今年以來的道瓊與台灣加權指數折線圖
+            ytd_start = f"{pd.Timestamp.today().year}-01-01"
+            
+            # 下載資料
+            dow = yf.download("^DJI", start=ytd_start, interval="1d", group_by='ticker')
+            twii = yf.download("^TWII", start=ytd_start, interval="1d", group_by='ticker')
+            
+            # 檢查資料是否有效
+            if not dow.empty and not twii.empty:
+                # 重設欄位名稱並扁平化
+                dow.columns = [col[1] if isinstance(col, tuple) else col for col in dow.columns]
+                twii.columns = [col[1] if isinstance(col, tuple) else col for col in twii.columns]
+                
+                dow = dow.reset_index()
+                dow['Index'] = '道瓊 (^DJI)'
+                
+                twii = twii.reset_index()
+                twii['Index'] = '台灣加權 (^TWII)'
+                
+                df_combined = pd.concat([
+                    dow[['Date', 'Close', 'Index']],
+                    twii[['Date', 'Close', 'Index']]
+                ])
+                
+                fig = px.line(
+                    df_combined,
+                    x='Date',
+                    y='Close',
+                    color='Index',
+                    title="2025 年至今：道瓊與台灣加權指數走勢",
+                    markers=True
+                )
+                fig.update_layout(yaxis_tickformat=",", height=450)
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.warning("指數資料不足，無法繪製走勢圖")
+
+        except Exception as e:
+            st.error(f"讀取大盤指數時發生錯誤：{e}")
+
+        if len(search_input) == 2 and search_input.isdigit():
             matched_stocks = stock_list_df[stock_list_df['code'].str.startswith(search_input)]
             if not matched_stocks.empty:
-                # 提供下拉選單供用戶選擇股票代碼
                 selected_stock = st.selectbox("選擇股票代碼", matched_stocks['display'])
                 st.write(f"你選擇了股票：{selected_stock}")
-                
-                # 顯示選中的股票的技術指標分析圖
-                ticker = selected_stock.split(' ')[0]  # 獲取股票代碼部分
+                ticker = selected_stock.split(' ')[0]
                 valid_tickers = get_valid_tickers([f"{ticker}.TW"])
                 if valid_tickers:
                     rsi_period = st.sidebar.number_input("RSI 週期", 5, 30, 14)
                     start, end = get_date_range()
                     data = yf.download(valid_tickers, start=start, end=end, group_by="ticker", threads=True)
                     df_result = calculate_technical_indicators(data, rsi_period)
-                    
+
                     if isinstance(df_result, dict):
                         for code, df in df_result.items():
                             st.subheader(f"\U0001F4C8 {code} 技術分析圖")
@@ -316,10 +387,8 @@ def stock_query():
             else:
                 st.warning(f"沒有找到以 '{search_input}' 開頭的股票代碼")
         else:
-            # 若用戶輸入股票代碼（單支或多支）
             codes = [code.strip() for code in search_input.split(',') if code.strip()]
             tickers = [f"{code}.TW" for code in codes]
-
             valid_tickers = get_valid_tickers(tickers)
             if not valid_tickers:
                 st.warning("找不到有效的股票代碼")
@@ -327,10 +396,7 @@ def stock_query():
 
             rsi_period = st.sidebar.number_input("RSI 週期", 5, 30, 14)
             start, end = get_date_range()
-
-            # 多支股票一次下載
             data = yf.download(valid_tickers, start=start, end=end, group_by="ticker", threads=True)
-
             df_result = calculate_technical_indicators(data, rsi_period)
 
             if isinstance(df_result, dict):
@@ -338,12 +404,10 @@ def stock_query():
                     st.subheader(f"\U0001F4C8 {code} 技術分析圖")
                     plot_stock(df, code)
             else:
-                # 只查一支的時候 fallback
                 st.subheader(f"\U0001F4C8 {valid_tickers[0]} 技術分析圖")
                 plot_stock(df_result, valid_tickers[0])
     else:
         st.write("請輸入股票代碼或名稱的前幾位以進行查詢。")
-
 
 # ==================== 主程式 ====================
 def main():
