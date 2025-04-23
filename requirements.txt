@@ -8,3 +8,4 @@ matplotlib
 seaborn
 plotly
 pandas_ta
+setuptools
