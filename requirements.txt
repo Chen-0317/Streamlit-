@@ -1,12 +1,12 @@
-streamlit-autorefresh
 streamlit
+streamlit-autorefresh
 yfinance
 pandas
+numpy
+pandas_ta
 requests
 beautifulsoup4
 matplotlib
 seaborn
 plotly
-numpy
-pandas_ta
 setuptools
