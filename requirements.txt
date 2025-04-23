@@ -2,8 +2,8 @@ streamlit
 streamlit-autorefresh
 yfinance
 pandas
-numpy
-pandas_ta
+numpy<2.0
+pandas_ta==0.3.14b0
 requests
 beautifulsoup4
 matplotlib
