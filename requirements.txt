@@ -8,3 +8,4 @@ matplotlib
 seaborn
 streamlit-autorefresh
 plotly
+talib
