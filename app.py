@@ -11,7 +11,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import os
 import numpy as np
-import talib as ta
+import pandas_ta as ta
 
 # ==================== 系統字體設定 ====================
 if platform.system() == 'Windows':
