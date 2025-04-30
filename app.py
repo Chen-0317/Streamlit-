@@ -2,16 +2,16 @@ import yfinance as yf
 import pandas as pd
 import requests
 import time
-from bs4 import BeautifulSoup
 import streamlit as st
-from datetime import datetime, timedelta
 import platform
-from streamlit_autorefresh import st_autorefresh
 import plotly.graph_objects as go
 import plotly.express as px
 import os
 import numpy as np
 import pandas_ta as ta
+from datetime import datetime, timedelta
+from bs4 import BeautifulSoup
+from streamlit_autorefresh import st_autorefresh
 
 # ==================== 系統字體設定 ====================
 if platform.system() == 'Windows':
